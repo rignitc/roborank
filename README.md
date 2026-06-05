@@ -8,12 +8,13 @@ The repository is structured around the various tasks provided by RoboRank, loca
 
 ### Solved Challenges
 
-The repository currently includes **6** solutions for the following challenges:
+The repository currently includes **7** solutions for the following challenges:
 - **`diff_drive_odometry`**: Estimating the pose of a differential drive robot using encoder and gyro data.
 - **`imu_collision_detection`**: Detecting collisions using IMU sensor data.
 - **`inverse_kinematics_1` & `inverse_kinematics_2`**: Solving inverse kinematics for robotic arms.
 - **`motor_torque_scale_control`**: Controlling motor torque.
 - **`trapezoidal_motion_profile`**: Generating and following a trapezoidal motion profile.
+- **`quadrotor_gate_sequence`**: Navigating a quadrotor through a sequence of gates.
 
 More will be added as they are solved and submitted with verified results.
 
