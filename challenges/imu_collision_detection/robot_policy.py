@@ -1,49 +1,42 @@
 import math
+from collections import deque
+
 
 class RobotPolicy:
     def __init__(self):
-        self.prev = None
-        self.accel_var = 1.0
-        self.gyro_var = 0.5
-        self.latched = False
-        self.severity = "none"
-        
+        self.buf = deque(maxlen=20)
+        self.baseline_samples = []
+        self.baseline_mean = None
+        self.baseline_var = None
+        self.calibrated = False
+        self.collision_detected = False
+
     def step(self, robot):
         s = robot.imu()
-        
-        if self.latched:
-            robot.submit_collision_decision(True, self.severity)
-            return
-        
-        if not self.prev:
-            self.prev = s
-            self.prev_accel = math.hypot(s.ax, s.ay, s.az)
-            self.prev_gyro = math.hypot(s.gx, s.gy, s.gz)
-            robot.submit_collision_decision(False, "none")
-            return
-        
-        dt = max(s.t - self.prev.t, 0.001)
-        
-        accel = math.hypot(s.ax, s.ay, s.az)
-        gyro = math.hypot(s.gx, s.gy, s.gz)
-        
-        accel_jerk = abs(accel - self.prev_accel) / dt
-        gyro_jerk = abs(gyro - self.prev_gyro) / dt
-        
-        self.accel_var = 0.98 * self.accel_var + 0.02 * (accel_jerk ** 2)
-        self.gyro_var = 0.98 * self.gyro_var + 0.02 * (gyro_jerk ** 2)
-        
-        accel_z = accel_jerk / max(0.5, self.accel_var ** 0.5)
-        gyro_z = gyro_jerk / max(0.3, self.gyro_var ** 0.5)
-        
-        if accel_z * gyro_z > 12.0:
-            self.latched = True
-            self.severity = "hard" if (accel_jerk > 35.0 or gyro_jerk > 15.0) else "light"
-            robot.submit_collision_decision(True, self.severity)
-            return
-        
-        robot.submit_collision_decision(False, "none")
-        
-        self.prev = s
-        self.prev_accel = accel
-        self.prev_gyro = gyro
+        mag = math.sqrt(s.ax**2 + s.ay**2 + s.az**2)
+        gmag = math.sqrt(s.gx**2 + s.gy**2 + s.gz**2)
+        self.buf.append((mag, gmag))
+
+        if not self.collision_detected:
+            if not self.calibrated:
+                self.baseline_samples.append(mag)
+                if len(self.baseline_samples) >= 15:
+                    m = sum(self.baseline_samples) / len(self.baseline_samples)
+                    v = sum((x - m)**2 for x in self.baseline_samples) / len(self.baseline_samples)
+                    self.baseline_mean = m
+                    self.baseline_var = max(v, 0.01)
+                    self.calibrated = True
+                robot.submit_collision_decision(False, "none")
+                return
+
+            std = math.sqrt(self.baseline_var)
+            z = (mag - self.baseline_mean) / std
+            gyro_spike = gmag > 2.5
+
+            if (z > 6.0 and gyro_spike) or z > 8.0:
+                severity = "hard" if z > 10.0 else "light"
+                self.collision_detected = True
+                robot.submit_collision_decision(True, severity)
+                return
+
+        robot.submit_collision_decision(self.collision_detected, "none" if not self.collision_detected else "light")

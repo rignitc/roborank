@@ -1,30 +1,27 @@
 # IMU Collision Detection
 
 ## Approach
-This solution uses IMU sensors to detect collisions. This is done by calculating jerk (derivative of acceleration) and angular jerk (derivative of angular velocity). A running variance of both values is maintained and if a combined, normalized 'z-score' (normalized linear jerk plus normalized angular jerk) is greater than a threshold, then a collision has occurred. The theory behind this approach is that a sudden change in the linear acceleration or angular velocity is representative of a collision. The linear jerk is calculated as the derivative of the magnitude of the acceleration vector, the angular jerk as the derivative of the magnitude of the angular velocity vector. Both of these are then divided by the running variance of the corresponding values to get a 'z-score' after which they are added together.
+Calibrate a baseline acceleration magnitude from the first 15 quiescent IMU samples, then detect collisions using a z-score threshold on incoming samples. A double gate — accel z-score >6σ with a simultaneous gyro spike, or accel alone >8σ — separates true impacts from terrain bumps and vibration. Once a collision is latched, the decision holds for the rest of the episode.
 
 ## Major Equations
-Jerk is calculated as the rate of change of magnitude:
+Acceleration and gyro magnitudes:
 ```math
-j_{accel} = \frac{|\vec{a}_t| - |\vec{a}_{t-1}|}{\Delta t}
+a = \sqrt{a_x^2 + a_y^2 + a_z^2}, \quad \omega = \sqrt{g_x^2 + g_y^2 + g_z^2}
 ```
 
-The variance is updated using an exponential moving average:
+Baseline statistics from calibration window:
 ```math
-\sigma_{accel}^2 = 0.98 \cdot \sigma_{accel}^2 + 0.02 \cdot j_{accel}^2
+\mu = \frac{1}{N}\sum a_i, \quad \sigma^2 = \frac{1}{N}\sum(a_i - \mu)^2
 ```
 
-Collision is triggered based on normalized scores:
+Z-score threshold for collision:
 ```math
-z_{accel} = \frac{j_{accel}}{\max(0.5, \sigma_{accel})}, \quad z_{gyro} = \frac{j_{gyro}}{\max(0.3, \sigma_{gyro})}
-```
-```math
-\text{Collision if } z_{accel} \cdot z_{gyro} > 12.0
+z = \frac{a - \mu}{\sigma} > 8 \quad \text{or} \quad z > 6 \text{ and } \omega > 2.5
 ```
 
 ## Inputs and Expected Output
-- **Inputs**: IMU state containing 3-axis acceleration (`ax, ay, az`), 3-axis angular velocity (`gx, gy, gz`), and timestamp (`t`).
-- **Output**: Submits a boolean decision and severity (`"none"`, `"light"`, `"hard"`) via `submit_collision_decision()`.
+- **Inputs**: `imu()` samples — linear acceleration $(a_x, a_y, a_z)$ and angular velocity $(g_x, g_y, g_z)$.
+- **Output**: `submit_collision_decision(contact, severity)` — severity is `"none"`, `"light"`, or `"hard"`.
 
 ## Score obtained with this approach
 
